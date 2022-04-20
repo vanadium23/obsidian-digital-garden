@@ -1,43 +1,73 @@
-import { MetadataCache } from "obsidian";
+import { MetadataCache, TFile, Vault } from "obsidian";
 
-export interface IFrontMatterEngine{
-    set(key: string, value: string|boolean|number): IFrontMatterEngine;
-    get(key: string): string|boolean|number);
-    apply(): boolean;
+export interface IFrontMatterEngine {
+    set(key: string, value: string | boolean | number): IFrontMatterEngine;
+    get(key: string): string | boolean | number;
+    apply(): Promise<void>;
 }
 
-export default class ObsidianFrontMatterSettings implements IFrontMatterEngine {
+export default class ObsidianFrontMatterEngine implements IFrontMatterEngine {
 
     metadataCache: MetadataCache;
-    filePath: string;
-    generatedFrontMatter: {} = {};
+    file: TFile;
+    vault: Vault;
 
-    constructor(metadataCache: MetadataCache, filePath: string){
-        this.metadataCache = metadataCache; 
-        this.filePath = filePath;
+    generatedFrontMatter: object = {};
+
+    constructor(vault: Vault, metadataCache: MetadataCache, file: TFile) {
+        this.metadataCache = metadataCache;
+        this.vault = vault;
+        this.file = file;
     }
 
-    set(key: string, value: string|boolean|number): ObsidianFrontMatterSettings {
+    set(key: string, value: string | boolean | number): ObsidianFrontMatterEngine {
+        //@ts-ignore
         this.generatedFrontMatter[key] = value;
         return this;
     }
 
-    get(key: string): string|boolean|number: ObsidianFrontMatterSettings {
-        this.getFrontMatterSnapshot()[key];
-        return this;
+    get(key: string): string | boolean | number {
+        //@ts-ignore
+        return this.getFrontMatterSnapshot()[key];
     }
 
-    apply(): boolean {
+    async apply(): Promise<void> {
         const newFrontMatter = this.getFrontMatterSnapshot();
-        console.log(newFrontMatter);
-        //Convert to yaml string
-        //Write to file
-        return true;
+
+        const content = await this.vault.cachedRead(this.file);
+        const frontmatterRegex = /^\s*?---\n([\s\S]*?)\n---/g;
+        const yaml = this.frontMatterToYaml(newFrontMatter);
+        let newContent = "";
+        if (content.match(frontmatterRegex)) {
+            newContent = content.replace(frontmatterRegex, (match) => {
+                return yaml;
+            });
+
+
+        } else {
+            newContent = `${yaml}\n${content}`;
+        }
+
+        await this.vault.modify(this.file, newContent);
     }
 
-    private getFrontMatterSnapshot(){
-        return {...this.metadataCache.getCache(this.filePath)?.frontmatter, ...this.generatedFrontMatter};
+    private frontMatterToYaml(frontMatter: {}) {
+        let yaml = "---\n";
+        for (const key of Object.keys(frontMatter)) {
+            //@ts-ignore
+            yaml += `${key}: ${frontMatter[key]}\n`;
+        }
+        yaml += "---";
+        return yaml;
+
     }
 
-     
+    private getFrontMatterSnapshot() {
+        const cachedFrontMatter = { ...this.metadataCache.getCache(this.file?.path)?.frontmatter };
+        delete cachedFrontMatter["position"];
+
+        return { ...cachedFrontMatter, ...this.generatedFrontMatter };
+    }
+
+
 }
