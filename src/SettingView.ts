@@ -34,6 +34,7 @@ export default class SettingView {
         this.initializeGitHubBaseURLSetting();
         this.initializeDefaultNoteSettings();
         this.initializeThemesSettings();
+		this.initializeRootFolderSetting();
         prModal.titleEl.createEl("h1", "Site template settings");
     }
 
@@ -243,6 +244,24 @@ export default class SettingView {
                 .setValue(this.settings.githubRepo)
                 .onChange(async (value) => {
                     this.settings.githubRepo = value;
+                    await this.saveSettings();
+                }));
+
+    }
+
+    private initializeRootFolderSetting() {
+        new Setting(this.settingsRootElement)
+            .setName('Root Folder')
+            .setDesc('This folder will be treated as root (trim in URL)')
+            .addText(text => text
+                .setPlaceholder('some/folder')
+                .setValue(this.settings.rootFolder)
+                .onChange(async (value) => {
+					let rootFolder = value;
+					if (rootFolder.endsWith("/")) {
+						rootFolder = rootFolder.substring(0, rootFolder.length-1);
+					}
+                    this.settings.rootFolder = rootFolder;
                     await this.saveSettings();
                 }));
 

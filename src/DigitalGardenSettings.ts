@@ -3,6 +3,7 @@ export default interface DigitalGardenSettings {
 	githubRepo: string;
 	githubUserName: string;
 	gardenBaseUrl: string;
+	rootFolder: string;
 	prHistory: string[];
 
 	theme: string;
