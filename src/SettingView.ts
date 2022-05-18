@@ -29,6 +29,7 @@ export default class SettingView {
 
 
         this.initializeGitHubRepoSetting();
+		this.initializeGithubRepoNotesPath();
         this.initializeGitHubUserNameSetting();
         this.initializeGitHubTokenSetting();
         this.initializeGitHubBaseURLSetting();
@@ -243,6 +244,20 @@ export default class SettingView {
                 .setValue(this.settings.githubRepo)
                 .onChange(async (value) => {
                     this.settings.githubRepo = value;
+                    await this.saveSettings();
+                }));
+
+    }
+
+    private initializeGithubRepoNotesPath() {
+        new Setting(this.settingsRootElement)
+            .setName('GitHub repo name')
+            .setDesc('The name of the GitHub repository')
+            .addText(text => text
+                .setPlaceholder('src/site/notes')
+                .setValue(this.settings.githubRepoNotesPath)
+                .onChange(async (value) => {
+                    this.settings.githubRepoNotesPath = value;
                     await this.saveSettings();
                 }));
 

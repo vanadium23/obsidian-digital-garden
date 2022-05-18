@@ -58,7 +58,7 @@ export default class Publisher {
         }
 
         const octokit = new Octokit({ auth: this.settings.githubToken });
-        const path = `src/site/notes/${vaultFilePath}`;
+        const path = `${this.settings.githubRepoNotesPath}/${vaultFilePath}`;
 
         const payload = {
             owner: this.settings.githubUserName,
@@ -140,7 +140,7 @@ export default class Publisher {
 
 
         const base64Content = Base64.encode(content);
-        const path = `src/site/notes/${filePath}`
+        const path = `${this.settings.githubRepoNotesPath}/${filePath}`
 
         const payload = {
             owner: this.settings.githubUserName,
