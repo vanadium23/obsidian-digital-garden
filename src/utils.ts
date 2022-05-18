@@ -16,12 +16,16 @@ function extractBaseUrl(url: string) {
 	return url && url.replace("https://", "").replace("http://", "").replace(/\/$/, '')
 }
 
-function generateUrlPath(filePath: string): string {
+function generateUrlPath(filePath: string, rootFolder: string): string {
 	if(!filePath){
 		return filePath;
 	}
 	const extensionLess = filePath.substring(0, filePath.lastIndexOf("."));
-	const noteUrlPath = extensionLess.split("/").map(x => slugify(x)).join("/") + "/";
+	let noteUrlPath = extensionLess;
+	if (rootFolder && noteUrlPath.startsWith(rootFolder)) {
+		noteUrlPath = noteUrlPath.substring(rootFolder.length);
+	}
+	noteUrlPath = noteUrlPath.split("/").map(x => slugify(x)).join("/") + "/";
 	return noteUrlPath;
 }
 

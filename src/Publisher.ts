@@ -213,7 +213,7 @@ export default class Publisher {
                 publishedFrontMatter["permalink"] = "/" + publishedFrontMatter["permalink"];
             }
         } else {
-            const noteUrlPath = generateUrlPath(filePath);
+            const noteUrlPath = generateUrlPath(filePath, this.settings.rootFolder);
             publishedFrontMatter["permalink"] = "/" + noteUrlPath;
         }
 
