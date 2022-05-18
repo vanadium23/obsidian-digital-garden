@@ -208,7 +208,10 @@ export default class Publisher {
             }
         } else {
             const noteUrlPath = generateUrlPath(filePath, this.settings.rootFolder);
-            publishedFrontMatter["permalink"] = "/" + noteUrlPath;
+			publishedFrontMatter["permalink"] = noteUrlPath;
+            if (!publishedFrontMatter["permalink"].startsWith("/")) {
+                publishedFrontMatter["permalink"] = "/" + publishedFrontMatter["permalink"];
+            }
         }
 
         return publishedFrontMatter;
