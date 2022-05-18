@@ -116,7 +116,7 @@ export default class Publisher {
         let text = await this.vault.cachedRead(file);
         text = await this.convertFrontMatter(text, file.path);
         text = await this.createTranscludedText(text, file.path, 0);
-        text = await this.convertLinksToFullPath(text, file.path);
+        // text = await this.convertLinksToFullPath(text, file.path);
         text = await this.createBase64Images(text, file.path);
         text = await this.removeObsidianComments(text);
         return text;
