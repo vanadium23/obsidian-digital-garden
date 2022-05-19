@@ -22,7 +22,7 @@ export default class DigitalGardenSiteManager implements IDigitalGardenSiteManag
             : `https://${this.settings.githubRepo}.netlify.app`;
 
 
-        const noteUrlPath = generateUrlPath(file.path);
+        const noteUrlPath = generateUrlPath(file.path, this.settings.rootFolder);
 
         let urlPath = `/${noteUrlPath}`;
 
@@ -51,10 +51,10 @@ export default class DigitalGardenSiteManager implements IDigitalGardenSiteManag
 
         const files = response.data.tree;
         const notes: Array<{ path: string, sha: string }> = files.filter(
-            (x: { path: string; type: string; }) => x.path.startsWith("src/site/notes/") && x.type === "blob" && x.path !== "src/site/notes/notes.json");
+            (x: { path: string; type: string; }) => x.path.startsWith(`${this.settings.githubRepoNotesPath}/`) && x.type === "blob" && x.path !== `${this.settings.githubRepoNotesPath}/notes.json`);
         const hashes: { [key: string]: string } = {};
         for (const note of notes) {
-            const vaultPath = note.path.replace("src/site/notes/", "");
+            const vaultPath = note.path.replace(`${this.settings.githubRepoNotesPath}/`, "");
             hashes[vaultPath] = note.sha;
         }
         return hashes;
@@ -148,7 +148,7 @@ export default class DigitalGardenSiteManager implements IDigitalGardenSiteManag
             "src/site/styles/style.scss",
             "src/site/styles/digital-garden-base.scss",
             "src/site/styles/obsidian-base.scss",
-            "src/site/notes/notes.json",
+            `${this.settings.githubRepoNotesPath}/notes.json`,
             "src/site/_includes/layouts/note.njk",
             "src/site/_includes/layouts/versionednote.njk",
             "src/site/_includes/components/notegrowthhistory.njk",
