@@ -22,7 +22,7 @@ export default class DigitalGardenSiteManager implements IDigitalGardenSiteManag
             : `https://${this.settings.githubRepo}.netlify.app`;
 
 
-        const noteUrlPath = generateUrlPath(file.path);
+        const noteUrlPath = generateUrlPath(file.path, this.settings.rootFolder);
 
         let urlPath = `/${noteUrlPath}`;
 
