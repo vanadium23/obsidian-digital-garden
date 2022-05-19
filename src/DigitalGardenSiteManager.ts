@@ -24,7 +24,10 @@ export default class DigitalGardenSiteManager implements IDigitalGardenSiteManag
 
         const noteUrlPath = generateUrlPath(file.path, this.settings.rootFolder);
 
-        let urlPath = `/${noteUrlPath}`;
+        let urlPath = `${noteUrlPath}`;
+		if (!urlPath.startsWith('/')) {
+			urlPath = `/${urlPath}`;
+		}
 
         const frontMatter = this.metadataCache.getCache(file.path).frontmatter;
 
