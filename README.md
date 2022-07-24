@@ -22,6 +22,7 @@ dg-home: true
 dg-publish: true
 ---
 ```
+(If you get backticks, \`\`\`, at the start and beginning when copy-pasting the above text, delete those. It should start and end with a triple dash, ---. See [this page](https://help.obsidian.md/Advanced+topics/YAML+front+matter) for more info about Obsidian and frontmatter.)
 
 **This does two things:**
 
@@ -64,6 +65,7 @@ In the future you will be notified with a visual cue whenever there is an update
 The plugin currently supports rendering of these types of note contents:
 * Basic Markdown Syntax
 * Links to other notes
+* Dataview queries (currently no support for DataviewJS)
 * Callouts/Admonitions
 * Embedded/Transcluded Excalidraw drawings 
 * Embedded/Transcluded Images
@@ -72,6 +74,8 @@ The plugin currently supports rendering of these types of note contents:
 * MathJax
 * Highlighted text
 * Footnotes
+* Mermaid diagrams
+* PlantUML diagrams
 
 
 ## Themes
