@@ -2,6 +2,7 @@ import DigitalGardenSettings from "src/DigitalGardenSettings";
 import { MetadataCache, TFile } from "obsidian";
 import { extractBaseUrl, generateUrlPath } from "./utils";
 import { Octokit } from "@octokit/core";
+import { Base64 } from 'js-base64';
 
 export interface IDigitalGardenSiteManager {
     getNoteUrl(file: TFile): string;
@@ -16,13 +17,66 @@ export default class DigitalGardenSiteManager implements IDigitalGardenSiteManag
         this.metadataCache = metadataCache;
     }
 
+    async updateEnv() {
+        const octokit = new Octokit({ auth: this.settings.githubToken });
+        const theme = JSON.parse(this.settings.theme);
+        const baseTheme = this.settings.baseTheme;
+        const siteName = this.settings.siteName;
+        let gardenBaseUrl = ''
+
+        //check that gardenbaseurl is not an access token wrongly pasted.
+        if (this.settings.gardenBaseUrl 
+            && !this.settings.gardenBaseUrl.startsWith("ghp_") 
+            && !this.settings.gardenBaseUrl.startsWith("github_pat")
+            && this.settings.gardenBaseUrl.contains(".")) {
+            gardenBaseUrl = this.settings.gardenBaseUrl;
+        }
+
+        let envSettings = '';
+        if (theme.name !== 'default') {
+            envSettings = `THEME=${theme.cssUrl}\nBASE_THEME=${baseTheme}`;
+        }
+        envSettings+=`\nSITE_NAME_HEADER=${siteName}`;
+        envSettings+=`\nSITE_BASE_URL=${gardenBaseUrl}`;
+
+        const defaultNoteSettings = {...this.settings.defaultNoteSettings};
+        for(const key of Object.keys(defaultNoteSettings)) {
+                //@ts-ignore
+                envSettings += `\n${key}=${defaultNoteSettings[key]}`;
+        }
+
+        const base64Settings = Base64.encode(envSettings);
+
+        let fileExists = true;
+        let currentFile = null;
+        try {
+            currentFile = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+                owner: this.settings.githubUserName,
+                repo: this.settings.githubRepo,
+                path: ".env",
+            });
+        } catch (error) {
+            fileExists = false;
+        }
+
+        //commit
+        await octokit.request('PUT /repos/{owner}/{repo}/contents/{path}', {
+            owner: this.settings.githubUserName,
+            repo: this.settings.githubRepo,
+            path: ".env",
+            message: `Update settings`,
+            content: base64Settings,
+            sha: fileExists ? currentFile.data.sha : null
+        });
+    }    
+
     getNoteUrl(file: TFile): string {
         const baseUrl = this.settings.gardenBaseUrl ?
             `https://${extractBaseUrl(this.settings.gardenBaseUrl)}`
             : `https://${this.settings.githubRepo}.netlify.app`;
 
 
-        const noteUrlPath = generateUrlPath(file.path, this.settings.rootFolder);
+        const noteUrlPath = generateUrlPath(file.path, this.settings.rootFolder, this.settings.slugifyEnabled);
 
         let urlPath = `${noteUrlPath}`;
 		if (!urlPath.startsWith('/')) {
@@ -140,26 +194,47 @@ export default class DigitalGardenSiteManager implements IDigitalGardenSiteManag
     private async modifyFiles(octokit: Octokit, branchName: string) {
         const filesToModify = [
             ".eleventy.js",
+            ".eleventyignore",
             "README.md",
             "netlify.toml",
             "package-lock.json",
             "package.json",
             "src/site/404.njk",
             "src/site/index.njk",
-            "src/site/versionednote.njk",
+            "src/site/sitemap.njk",
+            "src/site/index.11tydata.js",
             "src/site/versionednote.njk",
             "src/site/styles/style.scss",
             "src/site/styles/digital-garden-base.scss",
             "src/site/styles/obsidian-base.scss",
             `${this.settings.githubRepoNotesPath}/notes.json`,
+            `${this.settings.githubRepoNotesPath}/notes.11tydata.js`,
             "src/site/_includes/layouts/note.njk",
             "src/site/_includes/layouts/versionednote.njk",
             "src/site/_includes/components/notegrowthhistory.njk",
             "src/site/_includes/components/pageheader.njk",
+            "src/site/_includes/components/linkPreview.njk",
+            "src/site/_includes/components/sidebar.njk",
+            "src/site/_includes/components/graphScript.njk",
+            "src/site/_includes/components/filetree.njk",
+            "src/site/_includes/components/filetreeNavbar.njk",
+            "src/site/_includes/components/navbar.njk",
+            "src/site/_includes/components/searchButton.njk",
+            "src/site/_includes/components/searchContainer.njk",
+            "src/site/_includes/components/searchScript.njk",
+            "src/site/lunr-index.js",
+            "src/site/lunr.njk",
             "src/site/_data/versionednotes.js",
             "src/site/_data/meta.js",
-            "src/site/img/outgoing.svg"
+            "src/site/_data/filetree.js",
+            "src/site/img/outgoing.svg",
+            "src/helpers/constants.js",
+            "src/helpers/utils.js",
+            "src/helpers/linkUtils.js",
+            "netlify/functions/search/search.js",
+            
         ];
+
         for (const file of filesToModify) {
             //get from my repo
             const latestFile = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {

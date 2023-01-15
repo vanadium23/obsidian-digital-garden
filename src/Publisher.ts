@@ -6,6 +6,7 @@ import { arrayBufferToBase64, generateUrlPath, kebabize } from "./utils";
 import { vallidatePublishFrontmatter } from "./Validator";
 import { excaliDrawBundle, excalidraw } from "./constants";
 import { getAPI } from "obsidian-dataview";
+import slugify from "@sindresorhus/slugify";
 
 
 export interface IPublisher {
@@ -18,11 +19,11 @@ export default class Publisher {
     vault: Vault;
     metadataCache: MetadataCache;
     settings: DigitalGardenSettings;
-    frontmatterRegex: RegExp = /^\s*?---\n([\s\S]*?)\n---/g;
+    frontmatterRegex = /^\s*?---\n([\s\S]*?)\n---/g;
 
-    codeFenceRegex: RegExp = /`(.*?)`/g;
-    codeBlockRegex: RegExp = /```.*?\n[\s\S]+?```/g;
-    excaliDrawRegex: RegExp = /:\[\[(\d*?,\d*?)\],.*?\]\]/g;
+    codeFenceRegex = /`(.*?)`/g;
+    codeBlockRegex = /```.*?\n[\s\S]+?```/g;
+    excaliDrawRegex = /:\[\[(\d*?,\d*?)\],.*?\]\]/g;
 
     constructor(vault: Vault, metadataCache: MetadataCache, settings: DigitalGardenSettings) {
         this.vault = vault;
@@ -117,7 +118,8 @@ export default class Publisher {
         }
 
         let text = await this.vault.cachedRead(file);
-        text = await this.convertFrontMatter(text, file.path);
+		text = await this.convertFrontMatter(text, file.path);
+		text = await this.createBlockIDs(text);
         text = await this.createTranscludedText(text, file.path, 0);
         text = await this.convertDataViews(text, file.path);
         // text = await this.convertLinksToFullPath(text, file.path);
@@ -125,7 +127,19 @@ export default class Publisher {
         text = await this.createSvgEmbeds(text, file.path);
         text = await this.createBase64Images(text, file.path);
         return text;
-    }
+	}
+	
+	async createBlockIDs(text: string) {
+		const block_pattern = / \^([\w\d-]+)/g;
+		const complex_block_pattern = /\n\^([\w\d-]+)\n/g;
+		text = text.replace(complex_block_pattern, (match: string, $1: string) => {
+			return `{ #${$1}}\n\n`;
+		});
+		text = text.replace(block_pattern, (match: string, $1: string) => {
+			return `\n{ #${$1}}\n`;
+		});
+		return text;
+	}
 
 
     async uploadText(filePath: string, content: string) {
@@ -187,13 +201,25 @@ export default class Publisher {
     }
 
     async removeObsidianComments(text: string): Promise<string> {
-
-        const textToBeProcessed = this.stripAwayCodeFences(text);
-        const obsidianCommentsRegex: RegExp = /%%.+?%%/gms;
-        const obsidianCommentsMatches = textToBeProcessed.match(obsidianCommentsRegex);
+        const obsidianCommentsRegex = /%%.+?%%/gms;
+        const obsidianCommentsMatches = text.match(obsidianCommentsRegex);
+        const codeBlocks = text.match(this.codeBlockRegex) || [];
+        const codeFences = text.match(this.codeFenceRegex)||[];
+        const excalidraw = text.match(this.excaliDrawRegex)||[];
 
         if (obsidianCommentsMatches) {
             for (const commentMatch of obsidianCommentsMatches) {
+                //If comment is in a code block, code fence, or excalidrawing, leave it in
+                if(codeBlocks.findIndex(x=>x.contains(commentMatch))>-1){
+                    continue;
+                }
+                if(codeFences.findIndex(x=>x.contains(commentMatch))>-1){
+                    continue;
+                }
+
+                if(excalidraw.findIndex(x=>x.contains(commentMatch))>-1){
+                    continue;
+                }
                 text = text.replace(commentMatch, '');
             }
         }
@@ -211,7 +237,7 @@ export default class Publisher {
 
     async convertDataViews(text: string, path:string): Promise<string> {
         let replacedText = text;
-        const dataViewRegex: RegExp = /```dataview(.+?)```/gsm;
+        const dataViewRegex = /```dataview(.+?)```/gsm;
         const dvApi = getAPI();
         const matches = text.matchAll(dataViewRegex);
         if(!matches)return;
@@ -239,7 +265,8 @@ export default class Publisher {
         let publishedFrontMatter: any = { "dg-publish": true };
 
         publishedFrontMatter = this.addPermalink(fileFrontMatter, publishedFrontMatter, filePath);
-        publishedFrontMatter = this.addHomePageTag(fileFrontMatter, publishedFrontMatter);
+		publishedFrontMatter = this.addDefaultPassThrough(fileFrontMatter, publishedFrontMatter);
+        publishedFrontMatter = this.addPageTags(fileFrontMatter, publishedFrontMatter);
         publishedFrontMatter = this.addFrontMatterSettings(fileFrontMatter, publishedFrontMatter);
 
         const fullFrontMatter = publishedFrontMatter?.dgPassFrontmatter ? { ...fileFrontMatter, ...publishedFrontMatter } : publishedFrontMatter;
@@ -248,8 +275,22 @@ export default class Publisher {
         return `---\n${frontMatterString}\n---\n`;
     }
 
+	addDefaultPassThrough(baseFrontMatter: any, newFrontMatter: any) {
+		// Eventually we will add other pass-throughs here. e.g. tags.
+		const publishedFrontMatter = { ...newFrontMatter };
+		if (baseFrontMatter) {
+			if ( baseFrontMatter["title"]) {
+				publishedFrontMatter["title"] = baseFrontMatter["title"];
+			}
+			if ( baseFrontMatter["dg-metatags"]) {
+				publishedFrontMatter["metatags"] = baseFrontMatter["dg-metatags"];
+			}
+		}
+		return publishedFrontMatter;
+	}
+
     addPermalink(baseFrontMatter: any, newFrontMatter: any, filePath: string) {
-        let publishedFrontMatter = { ...newFrontMatter };
+        const publishedFrontMatter = { ...newFrontMatter };
 
         if (baseFrontMatter && baseFrontMatter["dg-permalink"]) {
             publishedFrontMatter["dg-permalink"] = baseFrontMatter["dg-permalink"];
@@ -261,7 +302,7 @@ export default class Publisher {
                 publishedFrontMatter["permalink"] = "/" + publishedFrontMatter["permalink"];
             }
         } else {
-            const noteUrlPath = generateUrlPath(filePath, this.settings.rootFolder);
+            const noteUrlPath = generateUrlPath(filePath, this.settings.rootFolder, this.settings.slugifyEnabled);
 			publishedFrontMatter["permalink"] = noteUrlPath;
             if (!publishedFrontMatter["permalink"].startsWith("/")) {
                 publishedFrontMatter["permalink"] = "/" + publishedFrontMatter["permalink"];
@@ -271,21 +312,17 @@ export default class Publisher {
         return publishedFrontMatter;
     }
 
-    addHomePageTag(baseFrontMatter: any, newFrontMatter: any) {
+    addPageTags(baseFrontMatter: any, newFrontMatter: any) {
         const publishedFrontMatter = { ...newFrontMatter };
-        if (baseFrontMatter && baseFrontMatter["dg-home"]) {
-            const tags = baseFrontMatter["tags"];
-            if (tags) {
-                if (typeof (tags) === "string") {
-                    publishedFrontMatter["tags"] = [tags, "gardenEntry"];
-                } else {
-                    publishedFrontMatter["tags"] = [...tags, "gardenEntry"];
-                }
-            } else {
-                publishedFrontMatter["tags"] = "gardenEntry";
+        if (baseFrontMatter) {
+            const tags = (typeof (baseFrontMatter["tags"]) == "string" ? [baseFrontMatter["tags"]] : baseFrontMatter["tags"]) || [];
+            if (baseFrontMatter["dg-home"]) {
+                tags.push("gardenEntry")
+            }
+            if(tags.length > 0){
+                publishedFrontMatter["tags"] = tags;
             }
         }
-
         return publishedFrontMatter;
     }
 
@@ -300,15 +337,16 @@ export default class Publisher {
                 //@ts-ignore
                 publishedFrontMatter[key] = baseFrontMatter[kebabize(key)]
             }
-            else {
-                //@ts-ignore
-                publishedFrontMatter[key] = this.settings.defaultNoteSettings[key];
-            }
         }
+
+        if(this.settings.defaultNoteSettings.dgPassFrontmatter){ 
+            //@ts-ignore
+            publishedFrontMatter.dgPassFrontmatter = this.settings.defaultNoteSettings.dgPassFrontmatter;
+        }
+
 
         return publishedFrontMatter;
     }
-
 
     async convertLinksToFullPath(text: string, filePath: string): Promise<string> {
         let convertedText = text;
@@ -324,6 +362,9 @@ export default class Publisher {
 
                     const textInsideBrackets = linkMatch.substring(linkMatch.indexOf('[') + 2, linkMatch.lastIndexOf(']') - 1);
                     let [linkedFileName, prettyName] = textInsideBrackets.split("|");
+                    if(linkedFileName.endsWith("\\")){
+                        linkedFileName = linkedFileName.substring(0, linkedFileName.length - 1);
+                    }
 
                     prettyName = prettyName || linkedFileName;
                     let headerPath = "";
@@ -337,11 +378,11 @@ export default class Publisher {
                     const fullLinkedFilePath = getLinkpath(linkedFileName);
                     const linkedFile = this.metadataCache.getFirstLinkpathDest(fullLinkedFilePath, filePath);
                     if (!linkedFile) {
-                        convertedText = convertedText.replace(linkMatch, `[[${linkedFileName}${headerPath}|${prettyName}]]`);
+                        convertedText = convertedText.replace(linkMatch, `[[${linkedFileName}${headerPath}\\|${prettyName}]]`);
                     }
                     if (linkedFile?.extension === "md") {
                         const extensionlessPath = linkedFile.path.substring(0, linkedFile.path.lastIndexOf('.'));
-                        convertedText = convertedText.replace(linkMatch, `[[${extensionlessPath}${headerPath}|${prettyName}]]`);
+                        convertedText = convertedText.replace(linkMatch, `[[${extensionlessPath}${headerPath}\\|${prettyName}]]`);
                     }
                 } catch (e) {
                     console.log(e);
@@ -358,7 +399,7 @@ export default class Publisher {
         if (currentDepth >= 4) {
             return text;
         }
-
+		const publishedFiles = await this.getFilesMarkedForPublishing();
         let transcludedText = text;
         const transcludedRegex = /!\[\[(.*?)\]\]/g;
         const transclusionMatches = text.match(transcludedRegex);
@@ -367,12 +408,12 @@ export default class Publisher {
             for (let i = 0; i < transclusionMatches.length; i++) {
                 try {
                     const transclusionMatch = transclusionMatches[i];
-                    let [tranclusionFileName, headerName] = transclusionMatch.substring(transclusionMatch.indexOf('[') + 2, transclusionMatch.indexOf(']')).split("|");
+                    const [tranclusionFileName, headerName] = transclusionMatch.substring(transclusionMatch.indexOf('[') + 2, transclusionMatch.indexOf(']')).split("|");
                     const tranclusionFilePath = getLinkpath(tranclusionFileName);
                     const linkedFile = this.metadataCache.getFirstLinkpathDest(tranclusionFilePath, filePath);
-
+					let sectionID = "";
                     if (linkedFile.name.endsWith(".excalidraw.md")) {
-                        let firstDrawing = ++numberOfExcaliDraws === 1;
+                        const firstDrawing = ++numberOfExcaliDraws === 1;
                         const excaliDrawCode = await this.generateExcalidrawMarkdown(linkedFile, firstDrawing, `${numberOfExcaliDraws}`, false);
 
                         transcludedText = transcludedText.replace(transclusionMatch, excaliDrawCode);
@@ -380,15 +421,54 @@ export default class Publisher {
                     } else if (linkedFile.extension === "md") {
 
                         let fileText = await this.vault.cachedRead(linkedFile);
-
+						if (tranclusionFileName.includes('#^')) {
+							// Transclude Block
+							const metadata = this.metadataCache.getFileCache(linkedFile);
+							const refBlock = tranclusionFileName.split('#^')[1];
+							sectionID = `#${slugify(refBlock)}`;
+							const blockInFile = metadata.blocks[refBlock];
+							if (blockInFile) {
+	
+								fileText = fileText
+									.split('\n')
+									.slice(blockInFile.position.start.line, blockInFile.position.end.line + 1)
+									.join('\n').replace(`^${refBlock}`, '');
+							}
+						} else if (tranclusionFileName.includes('#')) { // transcluding header only
+							const metadata = this.metadataCache.getFileCache(linkedFile);
+							const refHeader = tranclusionFileName.split('#')[1]; 
+							const headerInFile = metadata.headings?.find(header => header.heading === refHeader);
+							sectionID = `#${slugify(refHeader)}`;
+							if (headerInFile) {
+								const headerPosition = metadata.headings.indexOf(headerInFile);
+								// Embed should copy the content proparly under the given block
+								const cutTo = metadata.headings.slice(headerPosition + 1).find(header => header.level <= headerInFile.level);
+								if (cutTo) {
+									const cutToLine = cutTo?.position?.start?.line;
+									fileText = fileText
+									.split('\n')
+									.slice(headerInFile.position.start.line, cutToLine)
+									.join('\n');
+								} else {
+									fileText = fileText
+									.split('\n')
+									.slice(headerInFile.position.start.line)
+									.join('\n');
+								}
+								
+							}
+						}
                         //Remove frontmatter from transclusion
                         fileText = fileText.replace(this.frontmatterRegex, "");
 
                         const header = this.generateTransclusionHeader(headerName, linkedFile);
 
-                        const headerSection = header ? `${header}\n` : '';
-
-                        fileText = `\n<div class="transclusion internal-embed is-loaded"><div class="markdown-embed">\n\n<div class="markdown-embed-title">\n\n${headerSection}\n\n</div>\n\n`
+                        const headerSection = header ? `$<div class="markdown-embed-title">\n\n${header}\n\n</div>\n` : '';
+						let embedded_link = "";
+						if (publishedFiles.find((f) => f.path == linkedFile.path)) {
+							embedded_link = `<a class="markdown-embed-link" href="/${generateUrlPath(linkedFile.path, this.settings.rootFolder)}${sectionID}" aria-label="Open link"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-link"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></a>`;
+						}
+                        fileText = `\n<div class="transclusion internal-embed is-loaded">${embedded_link}<div class="markdown-embed">\n\n${headerSection}\n\n`
                             + fileText + '\n\n</div></div>\n'
 
                         if (fileText.match(transcludedRegex)) {
@@ -410,6 +490,14 @@ export default class Publisher {
 
     async createSvgEmbeds(text: string, filePath: string): Promise<string> {
 
+        function setWidth(svgText: string, size:string):string {
+            const parser = new DOMParser();
+            const svgDoc = parser.parseFromString(svgText, "image/svg+xml");
+            const svgElement = svgDoc.getElementsByTagName("svg")[0];
+            svgElement.setAttribute("width",size); 
+            const svgSerializer = new XMLSerializer();
+            return svgSerializer.serializeToString(svgDoc); 
+        }
         //![[image.svg]]
         const transcludedSvgRegex = /!\[\[(.*?)(\.(svg))\|(.*?)\]\]|!\[\[(.*?)(\.(svg))\]\]/g;
         const transcludedSvgs = text.match(transcludedSvgRegex);
@@ -417,10 +505,13 @@ export default class Publisher {
             for (const svg of transcludedSvgs) {
                 try {
 
-                    let [imageName, size] = svg.substring(svg.indexOf('[') + 2, svg.indexOf(']')).split("|");
+                    const [imageName, size] = svg.substring(svg.indexOf('[') + 2, svg.indexOf(']')).split("|");
                     const imagePath = getLinkpath(imageName);
                     const linkedFile = this.metadataCache.getFirstLinkpathDest(imagePath, filePath);
-                    const svgText = await this.vault.read(linkedFile);
+                    let svgText = await this.vault.read(linkedFile);
+                    if (svgText && size) {
+                        svgText = setWidth(svgText, size);
+                    }
                     text = text.replace(svg, svgText);
                 } catch {
                     continue;
@@ -434,15 +525,19 @@ export default class Publisher {
         if (linkedSvgMatches) {
             for (const svg of linkedSvgMatches) {
                 try {
-                    let pathStart = svg.lastIndexOf("(") + 1;
-                    let pathEnd = svg.lastIndexOf(")");
-                    let imagePath = svg.substring(pathStart, pathEnd);
+                    const [imageName, size] = svg.substring(svg.indexOf('[') + 2, svg.indexOf(']')).split("|");
+                    const pathStart = svg.lastIndexOf("(") + 1;
+                    const pathEnd = svg.lastIndexOf(")");
+                    const imagePath = svg.substring(pathStart, pathEnd);
                     if (imagePath.startsWith("http")) {
                         continue;
                     }
 
                     const linkedFile = this.metadataCache.getFirstLinkpathDest(imagePath, filePath);
-                    const svgText = await this.vault.read(linkedFile);
+                    let svgText = await this.vault.read(linkedFile);
+                    if (svgText && size) {
+                        svgText = setWidth(svgText, size);
+                    }
                     text = text.replace(svg, svgText);
                 } catch {
                     continue;
@@ -470,7 +565,7 @@ export default class Publisher {
                 try {
                     const imageMatch = transcludedImageMatches[i];
 
-                    let [imageName, size] = imageMatch.substring(imageMatch.indexOf('[') + 2, imageMatch.indexOf(']')).split("|");
+                    const [imageName, size] = imageMatch.substring(imageMatch.indexOf('[') + 2, imageMatch.indexOf(']')).split("|");
                     const imagePath = getLinkpath(imageName);
                     const linkedFile = this.metadataCache.getFirstLinkpathDest(imagePath, filePath);
                     const image = await this.vault.readBinary(linkedFile);
@@ -492,13 +587,13 @@ export default class Publisher {
                 try {
                     const imageMatch = imageMatches[i];
 
-                    let nameStart = imageMatch.indexOf('[') + 1;
-                    let nameEnd = imageMatch.indexOf(']');
-                    let imageName = imageMatch.substring(nameStart, nameEnd);
+                    const nameStart = imageMatch.indexOf('[') + 1;
+                    const nameEnd = imageMatch.indexOf(']');
+                    const imageName = imageMatch.substring(nameStart, nameEnd);
 
-                    let pathStart = imageMatch.lastIndexOf("(") + 1;
-                    let pathEnd = imageMatch.lastIndexOf(")");
-                    let imagePath = imageMatch.substring(pathStart, pathEnd);
+                    const pathStart = imageMatch.lastIndexOf("(") + 1;
+                    const pathEnd = imageMatch.lastIndexOf(")");
+                    const imagePath = imageMatch.substring(pathStart, pathEnd);
                     if (imagePath.startsWith("http")) {
                         continue;
                     }
@@ -541,7 +636,7 @@ export default class Publisher {
         return headerName;
     }
 
-    async generateExcalidrawMarkdown(file: TFile, includeExcaliDrawJs: boolean, idAppendage: string = "", includeFrontMatter = true): Promise<string> {
+    async generateExcalidrawMarkdown(file: TFile, includeExcaliDrawJs: boolean, idAppendage = "", includeFrontMatter = true): Promise<string> {
         if (!file.name.endsWith(".excalidraw.md")) return "";
 
         const fileText = await this.vault.cachedRead(file);

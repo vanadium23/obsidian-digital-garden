@@ -1,9 +1,11 @@
 import DigitalGardenSettings from './DigitalGardenSettings';
-import { ButtonComponent, Modal, Notice, Setting, App, TAbstractFile, TFile } from 'obsidian';
+import { ButtonComponent, Modal, Notice, Setting, App, TFile, debounce, MetadataCache } from 'obsidian';
 import axios from "axios";
 import { Octokit } from '@octokit/core';
 import { Base64 } from 'js-base64';
 import { arrayBufferToBase64 } from './utils';
+import DigitalGarden from 'main';
+import DigitalGardenSiteManager from './DigitalGardenSiteManager';
 
 export default class SettingView {
     private app: App;
@@ -13,6 +15,7 @@ export default class SettingView {
     private progressViewTop: HTMLElement;
     private loading: HTMLElement;
     private loadingInterval: any;
+    debouncedSaveAndUpdate = debounce(this.saveSiteSettingsAndUpdateEnv, 500, true);
 
     constructor(app: App, settingsRootElement: HTMLElement, settings: DigitalGardenSettings, saveSettings: () => Promise<void>) {
         this.app = app;
@@ -36,6 +39,8 @@ export default class SettingView {
         this.initializeDefaultNoteSettings();
         this.initializeThemesSettings();
 		this.initializeRootFolderSetting();
+        this.initializeSlugifySetting();
+        this.initializeRibbonIconSetting();
         prModal.titleEl.createEl("h1", "Site template settings");
     }
 
@@ -45,8 +50,7 @@ export default class SettingView {
 
         new Setting(this.settingsRootElement)
             .setName("Note Settings")
-            .setDesc(`Default settings for each published note. These can be overwritten per note via frontmatter. 
-            Note: After changing any of these settings, you must re-publish notes for it to take effect. They will appear in the "Changed" list in the publication center.`)
+            .setDesc(`Default settings for each published note. These can be overwritten per note via frontmatter.`)
             .addButton(cb => {
                 cb.setButtonText("Edit");
                 cb.onClick(async () => {
@@ -61,18 +65,107 @@ export default class SettingView {
                 t.setValue(this.settings.defaultNoteSettings.dgHomeLink)
                 t.onChange((val) => {
                     this.settings.defaultNoteSettings.dgHomeLink = val;
-                    this.saveSettings();
+                    this.saveSiteSettingsAndUpdateEnv(this.app.metadataCache, this.settings, this.saveSettings);
+                })
+            })
+
+       
+        new Setting(noteSettingsModal.contentEl)
+            .setName("Show local graph for notes (dg-show-local-graph)")
+            .setDesc("When turned on, notes will show its local graph on desktop. It will not be shown on mobile devices.")
+            .addToggle(t => {
+                t.setValue(this.settings.defaultNoteSettings.dgShowLocalGraph)
+                t.onChange((val) => {
+                    this.settings.defaultNoteSettings.dgShowLocalGraph = val;
+                    this.saveSiteSettingsAndUpdateEnv(this.app.metadataCache, this.settings, this.saveSettings);
+                })
+            })
+       
+        new Setting(noteSettingsModal.contentEl)
+            .setName("Show backlinks for notes (dg-show-backlinks)")
+            .setDesc("When turned on, notes will show backlinks in a sidebar on desktop and at the bottom of the page on mobile.")
+            .addToggle(t => {
+                t.setValue(this.settings.defaultNoteSettings.dgShowBacklinks)
+                t.onChange((val) => {
+                    this.settings.defaultNoteSettings.dgShowBacklinks = val;
+                    this.saveSiteSettingsAndUpdateEnv(this.app.metadataCache, this.settings, this.saveSettings);
                 })
             })
 
         new Setting(noteSettingsModal.contentEl)
+            .setName("Show a table of content for notes (dg-show-toc)")
+            .setDesc("When turned on, notes will show all headers as a table of content in a sidebar on desktop. It will not be shown on mobile devices.")
+            .addToggle(t => {
+                t.setValue(this.settings.defaultNoteSettings.dgShowToc)
+                t.onChange((val) => {
+                    this.settings.defaultNoteSettings.dgShowToc = val;
+                    this.saveSiteSettingsAndUpdateEnv(this.app.metadataCache, this.settings, this.saveSettings);
+                })
+            })
+
+        new Setting(noteSettingsModal.contentEl)
+            .setName("Show inline title (dg-show-inline-title)")
+            .setDesc("When turned on, the title of the note will show on top of the page.")
+            .addToggle(t => {
+                t.setValue(this.settings.defaultNoteSettings.dgShowInlineTitle)
+                t.onChange((val) => {
+                    this.settings.defaultNoteSettings.dgShowInlineTitle = val;
+                    this.saveSiteSettingsAndUpdateEnv(this.app.metadataCache, this.settings, this.saveSettings);
+                })
+            })
+            
+        new Setting(noteSettingsModal.contentEl)
+            .setName("Show filetree sidebar (dg-show-file-tree)")
+            .setDesc("When turned on, a filetree will be shown on your site.")
+            .addToggle(t => {
+                t.setValue(this.settings.defaultNoteSettings.dgShowFileTree)
+                t.onChange((val) => {
+                    this.settings.defaultNoteSettings.dgShowFileTree = val;
+                    this.saveSiteSettingsAndUpdateEnv(this.app.metadataCache, this.settings, this.saveSettings);
+                })
+            })
+
+        new Setting(noteSettingsModal.contentEl)
+            .setName("Enable search (dg-enable-search)")
+            .setDesc("When turned on, users will be able to search through the content of your site.")
+            .addToggle(t => {
+                t.setValue(this.settings.defaultNoteSettings.dgEnableSearch)
+                t.onChange((val) => {
+                    this.settings.defaultNoteSettings.dgEnableSearch = val;
+                    this.saveSiteSettingsAndUpdateEnv(this.app.metadataCache, this.settings, this.saveSettings);
+                })
+            })
+
+        new Setting(noteSettingsModal.contentEl)
+            .setName("Enable link preview (dg-link-preview)")
+            .setDesc("When turned on, hovering over links to notes in your garden shows a scrollable preview.")
+            .addToggle(t => {
+                t.setValue(this.settings.defaultNoteSettings.dgLinkPreview)
+                t.onChange((val) => {
+                    this.settings.defaultNoteSettings.dgLinkPreview = val;
+                    this.saveSiteSettingsAndUpdateEnv(this.app.metadataCache, this.settings, this.saveSettings);
+                })
+            })
+
+        new Setting(noteSettingsModal.contentEl)
+            .setName("Show Tags (dg-show-tags)")
+            .setDesc("When turned on, tags in your frontmatter will be displayed on each note. If search is enabled, clicking on a tag will bring up a search for all notes containing that tag.")
+            .addToggle(t => {
+                t.setValue(this.settings.defaultNoteSettings.dgShowTags)
+                t.onChange((val) => {
+                    this.settings.defaultNoteSettings.dgShowTags = val;
+                    this.saveSiteSettingsAndUpdateEnv(this.app.metadataCache, this.settings, this.saveSettings);
+                })
+            })
+
+         new Setting(noteSettingsModal.contentEl)
             .setName("Let all frontmatter through (dg-pass-frontmatter)")
             .setDesc("Determines whether to let all frontmatter data through to the site template. Be aware that this could break your site if you have data in a format not recognized by the template engine, 11ty.")
             .addToggle(t => {
                 t.setValue(this.settings.defaultNoteSettings.dgPassFrontmatter)
                 t.onChange((val) => {
                     this.settings.defaultNoteSettings.dgPassFrontmatter = val;
-                    this.saveSettings();
+                    this.saveSiteSettingsAndUpdateEnv(this.app.metadataCache, this.settings, this.saveSettings);
                 })
             })
     }
@@ -85,7 +178,7 @@ export default class SettingView {
 
         new Setting(this.settingsRootElement)
             .setName("Appearance")
-            .setDesc("Manage themes and favicons on your site")
+            .setDesc("Manage themes, sitename and favicons on your site")
             .addButton(cb => {
                 cb.setButtonText("Manage");
                 cb.onClick(async () => {
@@ -100,7 +193,7 @@ export default class SettingView {
                 dd.addOption('{"name": "default", "modes": ["dark"]}', "Default")
                 const sortedThemes = themesListResponse.data.sort((a: { name: string; }, b: { name: any; }) => a.name.localeCompare(b.name));
                 sortedThemes.map((x: any) => {
-                    dd.addOption(JSON.stringify({ ...x, cssUrl: `https://raw.githubusercontent.com/${x.repo}/${x.branch || 'master'}/obsidian.css` }), x.name);
+                    dd.addOption(JSON.stringify({ ...x, cssUrl: `https://raw.githubusercontent.com/${x.repo}/${x.branch || 'HEAD'}/${x.legacy ? 'obsidian.css': 'theme.css'}` }), x.name);
                     dd.setValue(this.settings.theme)
                     dd.onChange(async (val: any) => {
                         this.settings.theme = val;
@@ -124,6 +217,17 @@ export default class SettingView {
             });
 
         new Setting(themeModal.contentEl)
+            .setName('Sitename')
+            .setDesc('The name of your site. This will be displayed as the site header.')
+            .addText(text =>
+                text.setValue(this.settings.siteName)
+                    .onChange(async (value) => {
+                        this.settings.siteName = value;
+                        await this.saveSettings();
+                    })
+            );
+
+        new Setting(themeModal.contentEl)
             .setName("Favicon")
             .setDesc("Path to an svg in your vault you wish to use as a favicon. Leave blank to use default.")
             .addText(tc => {
@@ -141,49 +245,42 @@ export default class SettingView {
                 cb.setButtonText("Apply settings to site");
                 cb.onClick(async ev => {
                     const octokit = new Octokit({ auth: this.settings.githubToken });
-                    await this.updateEnv(octokit);
+                    await this.saveThemeAndUpdateEnv();
                     await this.addFavicon(octokit);
                 });
             })
 
 
     }
-    private async updateEnv(octokit: Octokit) {
+
+    private async saveThemeAndUpdateEnv() {
         const theme = JSON.parse(this.settings.theme);
         const baseTheme = this.settings.baseTheme;
         if (theme.modes.indexOf(baseTheme) < 0) {
             new Notice(`The ${theme.name} theme doesn't support ${baseTheme} mode.`)
             return;
         }
+        const gardenManager = new DigitalGardenSiteManager(this.app.metadataCache, this.settings)
+        await gardenManager.updateEnv();
 
-        let envSettings = '';
-        if (theme.name !== 'default') {
-            envSettings = `THEME=${theme.cssUrl}\nBASE_THEME=${baseTheme}`
-        }
-        const base64Settings = Base64.encode(envSettings);
-
-        let fileExists = true;
-        let currentFile = null;
-        try {
-            currentFile = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
-                owner: this.settings.githubUserName,
-                repo: this.settings.githubRepo,
-                path: ".env",
-            });
-        } catch (error) {
-            fileExists = false;
-        }
-
-        //commit
-        await octokit.request('PUT /repos/{owner}/{repo}/contents/{path}', {
-            owner: this.settings.githubUserName,
-            repo: this.settings.githubRepo,
-            path: ".env",
-            message: `Update theme`,
-            content: base64Settings,
-            sha: fileExists ? currentFile.data.sha : null
-        });
         new Notice("Successfully applied theme");
+        new Notice("Successfully set sitename");
+    }
+    
+    private async saveSiteSettingsAndUpdateEnv(metadataCache:MetadataCache, settings:DigitalGardenSettings, saveSettings: ()=>Promise<void> ) {
+        const octokit = new Octokit({ auth: settings.githubToken });
+        let updateFailed = false;
+        try {
+            const gardenManager = new DigitalGardenSiteManager(metadataCache, settings)
+            await gardenManager.updateEnv();
+        } catch {
+            new Notice("Failed to update settings. Make sure you have an internet connection.")
+            updateFailed = true;
+        }
+
+        if (!updateFailed) {
+            await saveSettings();
+        }
     }
 
     private async addFavicon(octokit: Octokit) {
@@ -232,7 +329,7 @@ export default class SettingView {
                 sha: faviconExists ? currentFaviconOnSite.data.sha : null
             });
 
-            new Notice(`Successfully set new favicon`)
+            new Notice(`Successfully set favicon`)
         }
 
     }
@@ -320,21 +417,48 @@ export default class SettingView {
 
     }
 
+
+
     private initializeGitHubBaseURLSetting() {
         new Setting(this.settingsRootElement)
             .setName('Base URL')
             .setDesc(`
-            This is used for the "Copy Note URL" command and is optional. 
-            If you leave it blank, the plugin will try to guess it from the repo name.
+            This is optional. It is used for the "Copy Garden URL" command, and for generating a sitemap.xml for better SEO. 
             `)
             .addText(text => text
-                .setPlaceholder('my-garden.netlify.app')
+                .setPlaceholder('https://my-garden.netlify.app')
                 .setValue(this.settings.gardenBaseUrl)
                 .onChange(async (value) => {
                     this.settings.gardenBaseUrl = value;
-                    await this.saveSettings();
+                    this.debouncedSaveAndUpdate(this.app.metadataCache, this.settings, this.saveSettings);
                 }));
     }
+
+    private initializeRibbonIconSetting() {
+        new Setting(this.settingsRootElement)
+            .setName('Show ribbon icon')
+            .setDesc('Show ribbon icon in the Obsidian sidebar. You need to reload Obsdian for changes to take effect.')
+            .addToggle(toggle =>
+                toggle.setValue(this.settings.showRibbonIcon)
+                    .onChange(async (value) => {
+                        this.settings.showRibbonIcon = value;
+                        await this.saveSettings();
+                    })
+            );
+    } 
+
+    private initializeSlugifySetting() {
+        new Setting(this.settingsRootElement)
+            .setName('Slugify Note URL')
+            .setDesc('Transform the URL from "/My Folder/My Note/" to "/my-folder/my-note". If your note titles contains non-English characters, this should be turned off.')
+            .addToggle(toggle =>
+                toggle.setValue(this.settings.slugifyEnabled)
+                    .onChange(async (value) => {
+                        this.settings.slugifyEnabled= value;
+                        await this.saveSettings();
+                    })
+            );
+    } 
 
     renderCreatePr(modal: Modal, handlePR: (button: ButtonComponent) => Promise<void>) {
 
@@ -395,7 +519,7 @@ export default class SettingView {
     renderLoading() {
         this.loading.show();
         const text = "Creating PR. This should take less than 1 minute";
-        const loadingText = this.loading.createEl('h2', { text });
+        const loadingText = this.loading.createEl('h4', { text });
         this.loadingInterval = setInterval(() => {
             if (loadingText.innerText === `${text}`) {
                 loadingText.innerText = `${text}.`;

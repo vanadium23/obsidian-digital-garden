@@ -7,6 +7,7 @@ import { PublishStatusBar } from 'src/PublishStatusBar';
 import { seedling } from 'src/constants';
 import { PublishModal } from 'src/PublishModal';
 import PublishStatusManager from 'src/PublishStatusManager';
+import ObsidianFrontMatterEngine from 'src/ObsidianFrontMatterEngine';
 
 const DEFAULT_SETTINGS: DigitalGardenSettings = {
 	githubRepo: '',
@@ -17,9 +18,21 @@ const DEFAULT_SETTINGS: DigitalGardenSettings = {
 	theme: "dark",
 	baseTheme: '{"name": "default", "modes": ["dark"]}',
 	faviconPath: '',
+	showRibbonIcon: true,
+	noteSettingsIsInitialized: false,
+	siteName: 'Digital Garden',
+	slugifyEnabled: true,
 	defaultNoteSettings: {
 		dgHomeLink: true,
 		dgPassFrontmatter: false,
+		dgShowBacklinks: false,
+		dgShowLocalGraph: false,
+		dgShowInlineTitle: false,
+		dgShowFileTree: false,
+		dgEnableSearch: false,
+		dgShowToc: false,
+		dgLinkPreview: false,
+		dgShowTags: false
 	}
 }
 
@@ -40,9 +53,12 @@ export default class DigitalGarden extends Plugin {
 		await this.addCommands();
 
 		addIcon('digital-garden-icon', seedling);
-		this.addRibbonIcon("digital-garden-icon", "Digital Garden Publication Center", async () => {
-			this.openPublishModal();
-		});
+		if(this.settings.showRibbonIcon){
+			this.addRibbonIcon("digital-garden-icon", "Digital Garden Publication Center", async () => {
+				this.openPublishModal();
+			});
+		}
+
 
 	}
 
@@ -175,6 +191,15 @@ export default class DigitalGarden extends Plugin {
 			}
 		});
 
+		this.addCommand({
+			id: 'dg-mark-note-for-publish',
+			name: 'Add publish flag',
+			callback: async () => {
+				const engine = new ObsidianFrontMatterEngine(this.app.vault, this.app.metadataCache, this.app.workspace.getActiveFile());
+				engine.set("dg-publish", true).apply();
+			}
+		});
+
 	}
 
 	openPublishModal() {
@@ -196,6 +221,13 @@ class DigitalGardenSettingTab extends PluginSettingTab {
 	constructor(app: App, plugin: DigitalGarden) {
 		super(app, plugin);
 		this.plugin = plugin;
+
+		if(!this.plugin.settings.noteSettingsIsInitialized) {
+			const siteManager = new DigitalGardenSiteManager(this.app.metadataCache, this.plugin.settings);
+			siteManager.updateEnv();
+			this.plugin.settings.noteSettingsIsInitialized = true;
+			this.plugin.saveData(this.plugin.settings);
+		}
 	}
 
 
