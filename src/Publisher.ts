@@ -124,6 +124,7 @@ export default class Publisher {
         text = await this.convertDataViews(text, file.path);
         // text = await this.convertLinksToFullPath(text, file.path);
         text = await this.removeObsidianComments(text);
+		text = await this.removeFullPathFromLinks(text);
         text = await this.createSvgEmbeds(text, file.path);
         text = await this.createBase64Images(text, file.path);
         return text;
@@ -346,6 +347,47 @@ export default class Publisher {
 
 
         return publishedFrontMatter;
+    }
+
+    async removeFullPathFromLinks(text: string): Promise<string> {
+        let convertedText = text;
+
+        const textToBeProcessed = this.stripAwayCodeFences(text);
+
+        const linkedFileRegex = /\[\[(.*?)\]\]/g;
+        const linkedFileMatches = textToBeProcessed.match(linkedFileRegex);
+
+        if (linkedFileMatches) {
+            for (const linkMatch of linkedFileMatches) {
+                try {
+
+                    const textInsideBrackets = linkMatch.substring(linkMatch.indexOf('[') + 2, linkMatch.lastIndexOf(']') - 1);
+                    let [linkedFileName, prettyName] = textInsideBrackets.split("|");
+					// remove extenstion
+					if (linkedFileName.indexOf(".md") !== -1) {
+						linkedFileName = linkedFileName.replace(".md", "");
+					}
+					// remove all path, except file name
+					if (linkedFileName.indexOf("/") !== -1) {
+						const fileParts = linkedFileName.split("/");
+						linkedFileName = fileParts.at(-1);
+					}
+
+					let replacement = `[[${linkedFileName}]]`;
+					if (prettyName) {
+						replacement = `[[${linkedFileName}|${prettyName}]]`;
+					}
+					convertedText = convertedText.replace(linkMatch, replacement);
+
+                } catch (e) {
+                    console.log(e);
+                    continue;
+                }
+            }
+        }
+
+        return convertedText;
+
     }
 
     async convertLinksToFullPath(text: string, filePath: string): Promise<string> {
