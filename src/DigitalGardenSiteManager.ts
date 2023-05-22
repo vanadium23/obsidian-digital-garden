@@ -119,10 +119,10 @@ export default class DigitalGardenSiteManager implements IDigitalGardenSiteManag
 
         const files = response.data.tree;
         const notes: Array<{ path: string, sha: string }> = files.filter(
-            (x: { path: string; type: string; }) => x.path.startsWith("src/site/notes/") && x.type === "blob" && x.path !== "src/site/notes/notes.json");
+            (x: { path: string; type: string; }) => x.path.startsWith("_notes/") && x.type === "blob" && x.path !== "_notes/notes.json");
         const hashes: { [key: string]: string } = {};
         for (const note of notes) {
-            const vaultPath = note.path.replace("src/site/notes/", "");
+            const vaultPath = note.path.replace("_notes/", "");
             hashes[vaultPath] = note.sha;
         }
         return hashes;
