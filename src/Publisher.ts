@@ -72,7 +72,7 @@ export default class Publisher {
 	}
 
 	async deleteImage(vaultFilePath: string) {
-		const path = `src/site/img/user/${encodeURI(vaultFilePath)}`;
+		const path = `assets/img/user/${encodeURI(vaultFilePath)}`;
 		return await this.delete(path);
 	}
 
@@ -227,7 +227,7 @@ export default class Publisher {
     }
 
 	async uploadImage(filePath: string, content: string) {
-		const path = `src/site${filePath}`
+		const path = `assets${filePath}`
         await this.uploadToGithub(path, content)
 	}
 

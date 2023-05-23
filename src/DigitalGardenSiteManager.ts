@@ -139,10 +139,10 @@ export default class DigitalGardenSiteManager implements IDigitalGardenSiteManag
 
         const files = response.data.tree;
         const images: Array<{ path: string, sha: string }> = files.filter(
-            (x: { path: string; type: string; }) => x.path.startsWith("src/site/img/user/") && x.type === "blob");
+            (x: { path: string; type: string; }) => x.path.startsWith("assets/img/user/") && x.type === "blob");
         const hashes: { [key: string]: string } = {};
         for (const img of images) {
-            const vaultPath = decodeURI(img.path.replace("src/site/img/user/", ""));
+            const vaultPath = decodeURI(img.path.replace("assets/img/user/", ""));
             hashes[vaultPath] = img.sha;
         }
         return hashes;
