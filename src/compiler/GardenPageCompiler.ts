@@ -715,7 +715,7 @@ export class GardenPageCompiler {
 						const image = await this.vault.readBinary(linkedFile);
 						const imageBase64 = arrayBufferToBase64(image);
 
-						const cmsImgPath = `/img/user/${linkedFile.path}`;
+						const cmsImgPath = `${linkedFile.name}`;
 						let name = "";
 
 						if (metaData && size) {
@@ -728,7 +728,7 @@ export class GardenPageCompiler {
 							name = imageName;
 						}
 
-						const imageMarkdown = `![${name}](${encodeURI(
+						const imageMarkdown = `![${name}](/openbox/assets/img/${encodeURI(
 							cmsImgPath,
 						)})`;
 
@@ -787,8 +787,8 @@ export class GardenPageCompiler {
 						}
 						const image = await this.vault.readBinary(linkedFile);
 						const imageBase64 = arrayBufferToBase64(image);
-						const cmsImgPath = `/img/user/${linkedFile.path}`;
-						const imageMarkdown = `![${imageName}](${cmsImgPath})`;
+						const cmsImgPath = `${linkedFile.name}`;
+						const imageMarkdown = `![${imageName}](/openbox/assets/img/${cmsImgPath})`;
 						assets.push({ path: cmsImgPath, content: imageBase64 });
 
 						imageText = imageText.replace(
