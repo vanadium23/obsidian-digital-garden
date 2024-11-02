@@ -243,7 +243,7 @@ export class GardenPageCompiler {
 					if (!linkedFile) {
 						convertedText = convertedText.replace(
 							linkMatch,
-							`[[${linkedFileName}${headerPath}\\|${linkDisplayName}]]`,
+							`[[${linkedFileName}${headerPath}|${linkDisplayName}]]`,
 						);
 						continue;
 					}
@@ -256,7 +256,7 @@ export class GardenPageCompiler {
 
 						convertedText = convertedText.replace(
 							linkMatch,
-							`[[${extensionlessPath}${headerPath}\\|${linkDisplayName}]]`,
+							`[[${extensionlessPath}${headerPath}|${linkDisplayName}]]`,
 						);
 					}
 				} catch (e) {
