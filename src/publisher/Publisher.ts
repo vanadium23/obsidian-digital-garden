@@ -17,7 +17,7 @@ export interface MarkedForPublishing {
 	images: string[];
 }
 
-export const IMAGE_PATH_BASE = "assets/img/";
+export const IMAGE_PATH_BASE = "content/images/";
 export const NOTE_PATH_BASE = "content/";
 
 /**
