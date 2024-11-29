@@ -5,8 +5,8 @@ import { CompiledPublishFile } from "src/publishFile/PublishFile";
 const logger = Logger.get("repository-connection");
 const oktokitLogger = Logger.get("octokit");
 
-const IMAGE_PATH_BASE = "src/site/";
-const NOTE_PATH_BASE = "src/site/notes/";
+export const IMAGE_PATH_BASE = "content/images/";
+export const NOTE_PATH_BASE = "content/";
 
 interface IOctokitterInput {
 	githubToken: string;
@@ -20,6 +20,17 @@ interface IPutPayload {
 	content: string;
 	branch?: string;
 	message?: string;
+}
+
+function convertVaultToRepoPath(vaultPath: string): string {
+	const path = vaultPath.startsWith("/") ? vaultPath.slice(1) : vaultPath;
+
+	if (path.endsWith(".md")) {
+		return NOTE_PATH_BASE + path;
+	}
+	const filename = path.split("/").at(-1);
+
+	return IMAGE_PATH_BASE + filename;
 }
 
 export class RepositoryConnection {
@@ -211,16 +222,7 @@ export class RepositoryConnection {
 			return;
 		}
 
-		const normalizePath = (path: string) =>
-			path.startsWith("/") ? path.slice(1) : path;
-
-		const filesToDelete = filePaths.map((path) => {
-			if (path.endsWith(".md")) {
-				return `${NOTE_PATH_BASE}${normalizePath(path)}`;
-			}
-
-			return `${IMAGE_PATH_BASE}${normalizePath(path)}`;
-		});
+		const filesToDelete = filePaths.map(convertVaultToRepoPath);
 
 		const repoDataPromise = this.octokit.request(
 			"GET /repos/{owner}/{repo}",
@@ -309,9 +311,6 @@ export class RepositoryConnection {
 		const latestCommitSha = latestCommit.sha;
 		const baseTreeSha = latestCommit.commit.tree.sha;
 
-		const normalizePath = (path: string) =>
-			path.startsWith("/") ? path.slice(1) : path;
-
 		const treePromises = files.map(async (file) => {
 			const [text, _] = file.compiledFile;
 
@@ -326,7 +325,7 @@ export class RepositoryConnection {
 				);
 
 				return {
-					path: `${NOTE_PATH_BASE}${normalizePath(file.getPath())}`,
+					path: convertVaultToRepoPath(file.getPath()),
 					mode: "100644",
 					type: "blob",
 					sha: blob.data.sha,
@@ -350,7 +349,7 @@ export class RepositoryConnection {
 					);
 
 					return {
-						path: `${IMAGE_PATH_BASE}${normalizePath(asset.path)}`,
+						path: convertVaultToRepoPath(asset.path),
 						mode: "100644",
 						type: "blob",
 						sha: blob.data.sha,

@@ -100,7 +100,7 @@ export default class Publisher {
 			return false;
 		}
 
-		const path = `${IMAGE_PATH_BASE}/${encodeURI(filename)}`;
+		const path = `${IMAGE_PATH_BASE}${filename}`;
 
 		return await this.delete(path, sha);
 	}

@@ -195,6 +195,7 @@ export default class DigitalGardenSiteManager {
 			(x): x is ContentTreeItem =>
 				typeof x.path === "string" &&
 				x.path.startsWith(NOTE_PATH_BASE) &&
+				!x.path.startsWith(IMAGE_PATH_BASE) &&
 				x.type === "blob" &&
 				x.path !== `${NOTE_PATH_BASE}notes.json`,
 		);
@@ -222,7 +223,9 @@ export default class DigitalGardenSiteManager {
 		const hashes: Record<string, string> = {};
 
 		for (const img of images) {
-			const vaultPath = decodeURI(img.path.replace(IMAGE_PATH_BASE, ""));
+			const vaultPath = decodeURI(
+				img.path.replace(IMAGE_PATH_BASE, "_media/"),
+			);
 			hashes[vaultPath] = img.sha;
 		}
 
